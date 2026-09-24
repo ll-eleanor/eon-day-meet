@@ -22,10 +22,10 @@ export default function App() {
   const tag = (id: string, role: Role) => update(responses.map(r => r.id === id ? { ...r, organizerRole: role } : r))
   const addResponse = (response: Response) => { update([...responses, response]); setOpen(false); setNotice('Your availability is now shared with the group.') }
   return <main>
-    <header><a className="brand" href="/l/J6Avq"><span>●</span> meet</a><div className="header-note">EoN Day availability poll</div></header>
+    <header id="header-wrapper"><a id="header-logo" aria-label="LettuceMeet" href="/l/J6Avq" /><div className="header-right"><button className="header-action" onClick={() => setOpen(true)}>Respond</button></div></header>
     <section className="card intro">
       <div><p className="eyebrow">GROUP MEETING</p><h1>EoN Day</h1><p className="muted">Tuesday, September 29, 2026 · Toronto time</p></div>
-      <button className="primary" onClick={() => setOpen(true)}>+ Add availability</button>
+      <button className="primary" onClick={() => setOpen(true)}>Add availability</button>
     </section>
     {isOrganizer && <div className="organizer-banner">Organizer mode is on. Choose a role beside any response to override its self-selected tag.</div>}
     <section className="toolbar card"><div><p className="small-label">VIEW AVAILABILITY FOR</p><div className="filters">{(['both', 'exec', 'jit'] as Filter[]).map(f => <button key={f} onClick={() => setFilter(f)} className={filter === f ? `filter selected ${f}` : 'filter'}>{f === 'both' ? 'Both' : f.toUpperCase()}</button>)}</div></div><p className="responders"><strong>{visible.length}</strong> responses shown</p></section>
@@ -41,15 +41,13 @@ function OverlapCalendar({ visible, counts, activeSlot, setActiveSlot }: { visib
   const activeResponses = activeSlot ? visible.filter(r => r.slots.includes(activeSlot)) : []
   const unavailable = activeSlot ? visible.filter(r => !r.slots.includes(activeSlot)) : []
   const describe = (slot: string) => `${timeLabel(slot)} on Tuesday, September 29: ${counts[slot] || 0} of ${visible.length} responses available`
-  return <div className="calendar-shell" onMouseLeave={() => setActiveSlot(null)}>
-    <div className="calendar-heading"><div /><div><span>SEP</span><strong>29</strong><span>TUE</span></div></div>
-    <div className="overlap-calendar">
-      {slots.map(slot => <div className="calendar-row" key={slot}>
-        <div className="time-axis">{timeLabel(slot)}</div>
-        <button type="button" aria-label={describe(slot)} aria-expanded={activeSlot === slot} className={`overlap-cell ${activeSlot === slot ? 'selected' : ''}`} style={{ '--fill': visible.length ? counts[slot] / visible.length : 0 } as React.CSSProperties} onMouseEnter={() => setActiveSlot(slot)} onFocus={() => setActiveSlot(slot)} onClick={() => setActiveSlot(activeSlot === slot ? null : slot)} onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.blur(); setActiveSlot(null) } }}>
-          <span>{counts[slot] || '—'}</span><small>{visible.length ? `of ${visible.length}` : 'no responses'}</small>
-        </button>
-      </div>)}
+  return <div className="ac-container" onMouseLeave={() => setActiveSlot(null)}>
+    <div className="calendar">
+      <div className="month-header">September 2026</div>
+      <div className="time-col"><div className="header timezone"><span className="timezone-text">EDT</span></div>{slots.map(slot => <div className="timeSlot" key={slot}>{timeLabel(slot)}</div>)}</div>
+      <div className="ac-grid"><div className="col"><div className="header"><span className="day-of-week">TUE</span><span className="day">29</span></div><div className="slots">
+        {slots.map(slot => <div className="slotGroup" key={slot}><button type="button" aria-label={describe(slot)} aria-expanded={activeSlot === slot} className={`slot ${activeSlot === slot ? 'selected' : ''}`} style={{ '--fill': visible.length ? counts[slot] / visible.length : 0 } as React.CSSProperties} onMouseEnter={() => setActiveSlot(slot)} onFocus={() => setActiveSlot(slot)} onClick={() => setActiveSlot(activeSlot === slot ? null : slot)} onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.blur(); setActiveSlot(null) } }}><span>{counts[slot] || ''}</span></button></div>)}
+      </div></div></div>
     </div>
     {activeSlot && <div className="availability-popover" role="status"><div className="popover-heading"><div><strong>Tue, Sep 29</strong><span>{timeLabel(activeSlot)}–{timeLabel(slots[Math.min(slots.indexOf(activeSlot) + 1, slots.length - 1)])}</span></div><b>{counts[activeSlot]} / {visible.length}</b></div><AvailabilityList title="Available" responses={activeResponses} empty="No one is available." /><AvailabilityList title="Unavailable" responses={unavailable} empty="Everyone is available." /></div>}
   </div>

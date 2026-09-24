@@ -14,6 +14,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>('both')
   const [open, setOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [activeSlot, setActiveSlot] = useState<string | null>(null)
   useEffect(() => { if (!localStorage.getItem('eon-day-responses-v1')) save(initialResponses); return subscribe(setResponses) }, [])
   const visible = useMemo(() => responses.filter(r => filter === 'both' || effectiveRole(r) === filter), [responses, filter])
   const counts = useMemo(() => Object.fromEntries(slots.map(s => [s, visible.filter(r => r.slots.includes(s)).length])), [visible]) as Record<string, number>
@@ -29,14 +30,37 @@ export default function App() {
     {isOrganizer && <div className="organizer-banner">Organizer mode is on. Choose a role beside any response to override its self-selected tag.</div>}
     <section className="toolbar card"><div><p className="small-label">VIEW AVAILABILITY FOR</p><div className="filters">{(['both', 'exec', 'jit'] as Filter[]).map(f => <button key={f} onClick={() => setFilter(f)} className={filter === f ? `filter selected ${f}` : 'filter'}>{f === 'both' ? 'Both' : f.toUpperCase()}</button>)}</div></div><p className="responders"><strong>{visible.length}</strong> responses shown</p></section>
     {notice && <div className="notice">{notice}<button onClick={() => setNotice('')}>×</button></div>}
-    <section className="schedule card"><div className="datebar"><span>SEP</span><strong>29</strong><span>TUE</span></div><div className="grid-wrap"><div className="grid"><div className="grid-head empty" />{slots.map((slot, i) => <div className="grid-head" key={slot}>{i % 2 === 0 && timeLabel(slot)}</div>)}<div className="summary-label">GROUP<br/>AVAILABILITY</div>{slots.map(slot => <div className="summary" key={slot} style={{ '--fill': visible.length ? counts[slot] / visible.length : 0 } as React.CSSProperties}><span>{counts[slot] || ''}</span></div>)}{visible.map(response => <ResponseRow key={response.id} response={response} onTag={tag} />)}</div></div><p className="legend"><i /> Darker green means more people are available. Select a role to recalculate this view.</p></section>
+    <section className="schedule card"><OverlapCalendar visible={visible} counts={counts} activeSlot={activeSlot} setActiveSlot={setActiveSlot} /><p className="legend"><i /> Darker green means more people are available. Hover or tap a time to see who can make it.</p></section>
+    {isOrganizer && <OrganizerTags responses={responses} onTag={tag} />}
     <p className="footnote">Times shown in America/Toronto · Updates are saved in this browser and shared with other open tabs.</p>
     {open && <ResponseForm onClose={() => setOpen(false)} onSave={addResponse} />}
   </main>
 }
 
-function ResponseRow({ response, onTag }: { response: Response; onTag: (id: string, role: Role) => void }) {
-  return <><div className="person"><div className="person-name" title={response.name}>{response.name}</div><RolePill role={effectiveRole(response)} />{isOrganizer && <select aria-label={`Set role for ${response.name}`} value={effectiveRole(response) ?? ''} onChange={e => onTag(response.id, (e.target.value || null) as Role)}><option value="">—</option><option value="exec">Exec</option><option value="jit">JIT</option></select>}</div>{slots.map(slot => <div key={slot} className={response.slots.includes(slot) ? 'available' : 'unavailable'} />)}</>
+function OverlapCalendar({ visible, counts, activeSlot, setActiveSlot }: { visible: Response[]; counts: Record<string, number>; activeSlot: string | null; setActiveSlot: (slot: string | null) => void }) {
+  const activeResponses = activeSlot ? visible.filter(r => r.slots.includes(activeSlot)) : []
+  const unavailable = activeSlot ? visible.filter(r => !r.slots.includes(activeSlot)) : []
+  const describe = (slot: string) => `${timeLabel(slot)} on Tuesday, September 29: ${counts[slot] || 0} of ${visible.length} responses available`
+  return <div className="calendar-shell" onMouseLeave={() => setActiveSlot(null)}>
+    <div className="calendar-heading"><div /><div><span>SEP</span><strong>29</strong><span>TUE</span></div></div>
+    <div className="overlap-calendar">
+      {slots.map(slot => <div className="calendar-row" key={slot}>
+        <div className="time-axis">{timeLabel(slot)}</div>
+        <button type="button" aria-label={describe(slot)} aria-expanded={activeSlot === slot} className={`overlap-cell ${activeSlot === slot ? 'selected' : ''}`} style={{ '--fill': visible.length ? counts[slot] / visible.length : 0 } as React.CSSProperties} onMouseEnter={() => setActiveSlot(slot)} onFocus={() => setActiveSlot(slot)} onClick={() => setActiveSlot(activeSlot === slot ? null : slot)} onKeyDown={event => { if (event.key === 'Escape') { event.currentTarget.blur(); setActiveSlot(null) } }}>
+          <span>{counts[slot] || '—'}</span><small>{visible.length ? `of ${visible.length}` : 'no responses'}</small>
+        </button>
+      </div>)}
+    </div>
+    {activeSlot && <div className="availability-popover" role="status"><div className="popover-heading"><div><strong>Tue, Sep 29</strong><span>{timeLabel(activeSlot)}–{timeLabel(slots[Math.min(slots.indexOf(activeSlot) + 1, slots.length - 1)])}</span></div><b>{counts[activeSlot]} / {visible.length}</b></div><AvailabilityList title="Available" responses={activeResponses} empty="No one is available." /><AvailabilityList title="Unavailable" responses={unavailable} empty="Everyone is available." /></div>}
+  </div>
+}
+
+function AvailabilityList({ title, responses, empty }: { title: string; responses: Response[]; empty: string }) {
+  return <div className="availability-list"><h3>{title} <span>{responses.length}</span></h3>{responses.length ? responses.map(response => <div className="availability-person" key={response.id}><span title={response.name}>{response.name}</span><RolePill role={effectiveRole(response)} /></div>) : <p>{empty}</p>}</div>
+}
+
+function OrganizerTags({ responses, onTag }: { responses: Response[]; onTag: (id: string, role: Role) => void }) {
+  return <section className="organizer-list card"><p className="small-label">ORGANIZER ROLE OVERRIDES</p>{responses.map(response => <div className="organizer-person" key={response.id}><span title={response.name}>{response.name}</span><RolePill role={effectiveRole(response)} /><select aria-label={`Set role for ${response.name}`} value={effectiveRole(response) ?? ''} onChange={e => onTag(response.id, (e.target.value || null) as Role)}><option value="">Unassigned</option><option value="exec">Exec</option><option value="jit">JIT</option></select></div>)}</section>
 }
 
 function ResponseForm({ onClose, onSave }: { onClose: () => void; onSave: (r: Response) => void }) {
